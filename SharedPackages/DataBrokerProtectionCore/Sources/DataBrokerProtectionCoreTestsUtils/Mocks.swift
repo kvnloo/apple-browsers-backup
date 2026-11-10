@@ -1157,6 +1157,7 @@ public final class MockDatabase: DataBrokerProtectionRepository {
     public var attemptCount: Int64 = 0
     public var scanEvents = [HistoryEvent]()
     public var optOutEvents = [HistoryEvent]()
+    public var fetchOptOutHistoryEventsError: Error?
     public var optOutToReturn: OptOutJobData?
 
     public var brokerToReturn: DataBroker?
@@ -1457,6 +1458,9 @@ public final class MockDatabase: DataBrokerProtectionRepository {
     }
 
     public func fetchOptOutHistoryEvents(brokerId: Int64, profileQueryId: Int64, extractedProfileId: Int64) throws -> [HistoryEvent] {
+        if let fetchOptOutHistoryEventsError {
+            throw fetchOptOutHistoryEventsError
+        }
         return optOutEvents
     }
 
@@ -1558,6 +1562,7 @@ public final class MockDatabase: DataBrokerProtectionRepository {
         attemptInformation = nil
         scanEvents.removeAll()
         optOutEvents.removeAll()
+        fetchOptOutHistoryEventsError = nil
         backgroundTaskEventsToReturn.removeAll()
         addHistoryEventError = nil
     }
