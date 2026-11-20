@@ -57,12 +57,15 @@ public enum ContentScopeScriptContext: Equatable {
     case brokerProtection
     case aiChatDataClearing
     case aiChatHistory
+    /// Isolated-world script for translating a page, injected on demand. It shares the isolated
+    /// message handler, so the tab's isolated script's broker carries its messages.
+    case pageTranslation
 
     public var isIsolated: Bool {
         switch self {
         case .contentScope, .aiChatDataClearing, .aiChatHistory:
             return false
-        case .contentScopeIsolated, .brokerProtection:
+        case .contentScopeIsolated, .brokerProtection, .pageTranslation:
             return true
         }
     }
@@ -73,7 +76,7 @@ public enum ContentScopeScriptContext: Equatable {
         switch self {
         case .contentScope, .contentScopeIsolated, .brokerProtection:
             return true
-        case .aiChatDataClearing, .aiChatHistory:
+        case .aiChatDataClearing, .aiChatHistory, .pageTranslation:
             return false
         }
     }
@@ -90,6 +93,8 @@ public enum ContentScopeScriptContext: Equatable {
             return "duckAiDataClearing"
         case .aiChatHistory:
             return "duckAiChatHistory"
+        case .pageTranslation:
+            return "pageTranslation"
         }
     }
 
@@ -101,7 +106,7 @@ public enum ContentScopeScriptContext: Equatable {
             return "duckAiDataClearing"
         case .aiChatHistory:
             return "duckAiChatHistory"
-        case .contentScopeIsolated, .brokerProtection:
+        case .contentScopeIsolated, .brokerProtection, .pageTranslation:
             return "contentScopeScriptsIsolated"
         }
     }
