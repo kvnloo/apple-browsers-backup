@@ -32,9 +32,10 @@ protocol AIChatDeleting {
     @MainActor
     func deleteChats(chatIDs: [String], isFireMode: Bool) async -> Result<Void, Error>
 
+    /// Requires native storage with `beforeClearing` or for `.fireButtonAll`. Calls `beforeClearing` once the deletion
+    /// can start, before anything is deleted.
     @discardableResult
     @MainActor
-    /// With `beforeClearing`, requires native storage and calls it once the deletion can start, before anything is deleted.
     func deleteAllChats(isFireMode: Bool,
                         source: AIChatDeletePixelSource,
                         beforeClearing: (@MainActor () -> Void)?) async -> Result<Void, Error>

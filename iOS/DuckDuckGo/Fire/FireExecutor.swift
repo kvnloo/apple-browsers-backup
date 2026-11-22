@@ -116,11 +116,13 @@ protocol FireExecuting {
     @MainActor
     func burnChats(chatIDs: [String], isFireMode: Bool) async -> Result<Void, Error>
 
-    /// Burn all persistent Duck.ai chats. Peer to `burnChat` so the chat-history sheet's
-    /// "Delete All" stays off `burn(request:)` (no tab/data orchestration, no delegate).
+    /// Burn all persistent Duck.ai chats. Peer to `burnChat`, kept off `burn(request:)`: it runs no Fire
+    /// workers and calls no delegate.
+    ///
+    /// With `closingChatTabs`, requires native storage, calls it to close chat tabs before anything is
+    /// deleted, and reloads idle Duck.ai tabs after a success.
     @discardableResult
     @MainActor
-    /// With `closingChatTabs`, requires native storage, calls it before anything is deleted, and reloads idle Duck.ai tabs after a success.
     func burnAllChats(isFireMode: Bool,
                       source: AIChatDeletePixelSource,
                       closingChatTabs: (@MainActor () -> Void)?) async -> Result<Void, Error>
