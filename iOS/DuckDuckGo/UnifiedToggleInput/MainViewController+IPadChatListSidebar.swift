@@ -148,6 +148,19 @@ extension MainViewController {
         // Fire tabs read their own storage, so switching between fire and regular tabs needs another list.
         detachIPadChatListSidebar()
         let viewModel = makeAIChatHistoryViewModel(source: .browserMenu, isFireMode: isFireMode)
+        viewModel.onDeleteAllChatsFailed = { [weak self] in
+            self?.presentDeleteAllChatsFailure()
+        }
+        viewModel.onCloseChatTabs = { [weak self] isFireMode in
+            self?.closeChatTabsForDeletingAllChats(in: isFireMode ? .fire : .normal) { [weak self] closingTabs in
+                // The list can't stay on a tab that is closing, nor reopen on the tab that replaces it.
+                guard let self, let tab = iPadChatListSidebarTab,
+                      closingTabs.contains(where: { $0 === tab.tabModel }) else { return }
+                duckAIInputFocus.forget()
+                detachIPadChatListSidebar()
+                iPadChatListSidebarState.isOpen = false
+            }
+        }
         let sidebar = IPadChatListSidebar(viewModel: viewModel,
                                           fireButtonAnimator: fireButtonAnimator,
                                           isFireMode: isFireMode,
