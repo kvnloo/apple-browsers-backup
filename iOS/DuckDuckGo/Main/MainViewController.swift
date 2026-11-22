@@ -8773,9 +8773,9 @@ extension MainViewController: TabDelegate {
         let navigationController = UINavigationController(rootViewController: content)
         navigationController.modalPresentationStyle = .automatic
         let historyTab = tabManager.currentTabsModel.currentTab
-        viewModel.onDeleteAllChatsFailed = { [weak self, weak navigationController] in
-            guard let self, let navigationController, presentedViewController === navigationController else { return }
-            presentDeleteAllChatsFailure()
+        viewModel.onDeleteAllChatsFailed = { [weak self] in
+            // The sheet may already be gone if its tab closed; the alert then shows over what remains.
+            self?.presentDeleteAllChatsFailure()
         }
         viewModel.onCloseChatTabs = { [weak self, weak navigationController, weak historyTab] isFireMode in
             self?.closeChatTabsForDeletingAllChats(in: isFireMode ? .fire : .normal) { [weak self] closingTabs in
