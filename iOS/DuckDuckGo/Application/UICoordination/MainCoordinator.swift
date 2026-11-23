@@ -218,6 +218,8 @@ final class MainCoordinator {
         let translationOfferProvider = Self.makeTranslationOfferProvider(translationModels: translationModels,
                                                                          featureFlagger: featureFlagger,
                                                                          privacyConfig: privacyConfigurationManager)
+        // One translator for every tab, so only one model is ever in memory.
+        let pageTranslator = translationModels.map { PageTranslator(models: $0) }
 
         tabManager = TabManager(tabsModelProvider: tabsModelProvider,
                                 previewsSource: previewsSource,
@@ -260,6 +262,7 @@ final class MainCoordinator {
                                 adBlockingAvailability: contentBlockingService.adBlockingAvailability,
                                 eventHub: eventHub,
                                 pageTranslationOfferProvider: translationOfferProvider,
+                                pageTranslator: pageTranslator,
                                 clearAppSwitcherSnapshots: clearAppSwitcherSnapshots)
         // Start before any tab saves a decision, so each saved site keeps its favicon.
         _ = tabManager.sitePermissionsFavicons
