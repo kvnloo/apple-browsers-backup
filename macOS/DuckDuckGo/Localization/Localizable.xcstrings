@@ -38687,6 +38687,30 @@
         }
       }
     },
+    "duckai.ask-about-link.unavailable.message" : {
+      "comment" : "Message of the alert shown when Duck.ai couldn't read the page behind a link the user asked about",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Duck.ai couldn't read this page."
+          }
+        }
+      }
+    },
+    "duckai.ask-about-link.unavailable.title" : {
+      "comment" : "Title of the alert shown when Duck.ai couldn't read the page behind a link the user asked about",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page content unavailable"
+          }
+        }
+      }
+    },
     "duckai.attach-selection.context-menu-action" : {
       "comment" : "Context menu option that attaches the selected text to Duck.ai as page context",
       "extractionState" : "extracted_with_value",

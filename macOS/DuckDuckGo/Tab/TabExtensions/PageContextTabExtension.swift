@@ -101,6 +101,12 @@ final class PageContextTabExtension {
     /// text selection (the selection is the context they asked about).
     private var autoAttachSuppression = AutoPageContextSuppression()
 
+    /// "Ask about page" on a link owns the page-context slot until the tab navigates: while the link
+    /// loads and once its page is attached, the tab's own page is neither collected nor pushed.
+    private var isLinkedPageInSlot = false
+    private var linkedPageTask: Task<LinkedPageContextLoadResult?, Never>?
+    private let linkedPageLoader: LinkedPageContextLoading
+
     private weak var webView: WKWebView?
     private weak var pageContextUserScript: PageContextUserScript? {
         didSet {
@@ -125,6 +131,7 @@ final class PageContextTabExtension {
         aiChatMenuConfiguration: AIChatMenuVisibilityConfigurable,
         isLoadedInSidebar: Bool,
         faviconManagement: FaviconManagement,
+        linkedPageLoader: LinkedPageContextLoading,
         browserTools: AIChatBrowserToolsService = Application.appDelegate.aiChatBrowserToolsService
     ) {
         self.tabID = tabID
@@ -136,6 +143,7 @@ final class PageContextTabExtension {
         self.aiChatMenuConfiguration = aiChatMenuConfiguration
         self.isLoadedInSidebar = isLoadedInSidebar
         self.faviconManagement = faviconManagement
+        self.linkedPageLoader = linkedPageLoader
 
         guard !isLoadedInSidebar else {
             return
@@ -171,6 +179,8 @@ final class PageContextTabExtension {
                     self.cachedPageContext = nil
                     // Selections are tied to the page they were made on — drop any not-yet-flushed ones.
                     self.pendingSelectionContexts = []
+                    // A linked page was asked about from the page the user just left.
+                    self.cancelLinkedPage()
                     // Drop the previous page's outstanding collects so a slow or never-resolving
                     // collect can't pair (FIFO) with this page's result and mis-attribute its
                     // extraction measurement (trigger/latency/outcome).
@@ -213,7 +223,7 @@ final class PageContextTabExtension {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isEnabled in
-                guard let self else {
+                guard let self, !self.isLinkedPageInSlot else {
                     return
                 }
                 if isEnabled {
@@ -227,6 +237,10 @@ final class PageContextTabExtension {
             }
             .store(in: &cancellables)
 
+    }
+
+    deinit {
+        linkedPageTask?.cancel()
     }
 
     private func subscribeToCollectionResult() {
@@ -286,6 +300,7 @@ final class PageContextTabExtension {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard let self else { return }
+                self.cancelLinkedPage()
                 self.resumeAutoAttachAfterUserAttach()
                 self.shouldForceContextCollection = true
                 self.collectPageContextIfNeeded(trigger: .userRequest)
@@ -378,6 +393,13 @@ final class PageContextTabExtension {
     }
 
     private func deliverContextToCurrentSidebar() {
+        // A linked page arrives on its own; until then the sidebar keeps whatever it had.
+        if isLinkedPageInSlot {
+            if let cachedPageContext {
+                aiChatSessionStore.sessions[tabID]?.chatViewController?.setPageContext(cachedPageContext)
+            }
+            return
+        }
         // Opening the sidebar attaches the page even if the user removed it the last time it was open.
         autoAttachSuppression.sidebarOpened()
         let didHandlePage = reportSidebarOpenExtractionOutcome()
@@ -659,6 +681,7 @@ final class PageContextTabExtension {
         // collectPageContextIfNeeded would bail too, leaving the flag set and leaking into the next
         // navigation (auto-attaching that page even with auto-send off).
         guard case .url = content else { return }
+        cancelLinkedPage()
         resumeAutoAttachAfterUserAttach()
         shouldForceContextCollection = true
         collectPageContextIfNeeded(trigger: .userRequest)
@@ -705,6 +728,66 @@ final class PageContextTabExtension {
         let items = pendingSelectionContexts
         pendingSelectionContexts = []
         items.forEach { chatViewController.submitSelectionContext($0) }
+    }
+
+    // MARK: - Linked Page ("Ask about page" on a link)
+
+    /// Loads `url` out of sight and attaches its page to the sidebar in place of this tab's page.
+    /// Takes the slot right away, so the sidebar opening meanwhile doesn't attach this tab's page.
+    /// The task returns nil when the load was superseded, the tab navigated or the tab closed; then
+    /// nothing is attached and no outcome is reported.
+    @MainActor
+    func attachLinkedPage(_ url: URL) -> Task<LinkedPageContextLoadResult?, Never> {
+        linkedPageTask?.cancel()
+        isLinkedPageInSlot = true
+        // Drop this tab's own page, so a sidebar opening for the link can't attach it, even when the link fails.
+        cachedPageContext = nil
+        autoAttachSuppression.selectionActionOpenedSidebar()
+
+        let startedAt = Date()
+        let task = Task { @MainActor [weak self, linkedPageLoader] () -> LinkedPageContextLoadResult? in
+            let loaded = await linkedPageLoader.load(url)
+            guard let self, !Task.isCancelled else { return nil }
+            self.linkedPageTask = nil
+            let result = self.applyingAttachabilityPolicy(to: loaded)
+            let latency = PageContextExtractionLatencyBucket(seconds: Date().timeIntervalSince(startedAt))
+            switch result {
+            case .success(let pageContext):
+                self.cachedPageContext = self.replaceFaviconURLWithEncodedData(pageContext)
+                self.hasContextBeenConsumedByChat = false
+                self.aiChatSessionStore.sessions[self.tabID]?.chatViewController?.setPageContext(self.cachedPageContext)
+                self.fireLinkedPageExtractionPixel(.success, latency: latency)
+            case .failed(let reason):
+                self.fireLinkedPageExtractionPixel(.failure(reason), latency: latency)
+            case .prevented(let category):
+                self.fireLinkedPageExtractionPixel(.prevented(category), latency: latency)
+            }
+            return result
+        }
+        linkedPageTask = task
+        return task
+    }
+
+    /// The linked page goes through the same blocklist as a tab's page, judged by its own URL and type.
+    private func applyingAttachabilityPolicy(to result: LinkedPageContextLoadResult) -> LinkedPageContextLoadResult {
+        guard case .success(let pageContext) = result,
+              let url = URL(string: pageContext.url),
+              let verdict = currentAttachabilityPolicy()?.verdict(url: url, mimeType: pageContext.mimeType),
+              !verdict.isAttachable else {
+            return result
+        }
+        return .prevented(verdict.preventionReason ?? PageContextExtractionOutcome.internalPageCategory)
+    }
+
+    private func fireLinkedPageExtractionPixel(_ outcome: PageContextExtractionOutcome, latency: PageContextExtractionLatencyBucket) {
+        guard isExtractionMeasurementEnabled else { return }
+        extractionPixelHandler.fire(outcome, trigger: .link, latency: latency, contextType: .markdown)
+    }
+
+    private func cancelLinkedPage() {
+        linkedPageTask?.cancel()
+        linkedPageTask = nil
+        isLinkedPageInSlot = false
     }
 
     // MARK: - Multiple Page Contexts
@@ -827,7 +910,8 @@ final class PageContextTabExtension {
     /// (content stripped) via `handleSignalsOnly`. No-op when auto-attach is ON (the full-content
     /// path already carries the signals) or when off a real web page.
     private func requestSignalsOnlyCollectionIfNeeded() {
-        guard featureFlagger.isFeatureOn(.aiChatPageContext),
+        guard !isLinkedPageInSlot,
+              featureFlagger.isFeatureOn(.aiChatPageContext),
               featureFlagger.isFeatureOn(.sidebarSuggestedPrompts),
               case .url(let url, _, _) = content,
               !isContextCollectionEnabled,
@@ -865,7 +949,8 @@ final class PageContextTabExtension {
     /// without attaching content.
     @MainActor
     private func handleSignalsOnly(_ pageContext: AIChatPageContextData?) async {
-        guard featureFlagger.isFeatureOn(.aiChatPageContext),
+        guard !isLinkedPageInSlot,
+              featureFlagger.isFeatureOn(.aiChatPageContext),
               let pageContext,
               let session = aiChatSessionStore.sessions[tabID],
               session.chatViewController != nil else {
@@ -963,6 +1048,10 @@ protocol PageContextProtocol: AnyObject, NavigationResponder {
     /// Force-collects and attaches the current page's context to the sidebar, bypassing the
     /// auto-send preference (used by the tab-bar "Ask About Page" action).
     @MainActor func requestPageContextAttachment()
+
+    /// Attaches the page behind a link to the sidebar in place of the tab's own page, without
+    /// navigating the tab. The task returns nil when the attach was cancelled.
+    @MainActor func attachLinkedPage(_ url: URL) -> Task<LinkedPageContextLoadResult?, Never>
 }
 
 extension PageContextTabExtension: PageContextProtocol, TabExtension {

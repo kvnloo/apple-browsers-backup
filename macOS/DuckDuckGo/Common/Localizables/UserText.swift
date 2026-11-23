@@ -858,6 +858,8 @@ struct UserText {
 
     static let aiChatSummarize = NSLocalizedString("duckai.summarize.context-menu-action", value: "Summarize with Duck.ai", comment: "Context menu option that triggers Duck.ai-assisted summarization of selected text")
     static let aiChatTranslate = NSLocalizedString("duckai.translate.context-menu-action", value: "Translate with Duck.ai", comment: "Context menu option that triggers Duck.ai-assisted translation of selected text")
+    static let aiChatLinkPageContentUnavailableTitle = NSLocalizedString("duckai.ask-about-link.unavailable.title", value: "Page content unavailable", comment: "Title of the alert shown when Duck.ai couldn't read the page behind a link the user asked about")
+    static let aiChatLinkPageContentUnavailableMessage = NSLocalizedString("duckai.ask-about-link.unavailable.message", value: "Duck.ai couldn't read this page.", comment: "Message of the alert shown when Duck.ai couldn't read the page behind a link the user asked about")
     static let aiChatAttachSelection = NSLocalizedString("duckai.attach-selection.context-menu-action", value: "Ask Duck.ai About Selected Content", comment: "Context menu option that attaches the selected text to Duck.ai as page context")
     static let aiChatTextSelection = NSLocalizedString("duckai.text-selection.context-title", value: "Text selection", comment: "Generic title shown on the Duck.ai sidebar attachment chip when the attached content is a user text selection rather than a full web page")
 

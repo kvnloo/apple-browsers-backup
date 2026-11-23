@@ -94,6 +94,12 @@ protocol AIChatMenuVisibilityConfigurable {
     /// - Returns: `true` if the attach-selection menu action should be displayed; otherwise, `false`.
     var shouldDisplaySelectionContextMenuItem: Bool { get }
 
+    /// Whether a link's context menu offers "Ask About Page" for the linked page. Links on
+    /// DuckDuckGo search results and links elsewhere sit behind separate flags.
+    ///
+    /// - Parameter onSERP: whether the link is on a DuckDuckGo search results page.
+    func shouldDisplayAskAboutLinkMenuItem(onSERP: Bool) -> Bool
+
     /// A publisher that emits a value when either the `shouldDisplayApplicationMenuShortcut`  settings, backed by storage, are changed.
     ///
     /// This allows subscribers to react to changes in the visibility settings of the application menu
@@ -138,6 +144,12 @@ final class AIChatMenuConfiguration: AIChatMenuVisibilityConfigurable {
 
     var shouldDisplaySelectionContextMenuItem: Bool {
         shouldDisplayAnyAIChatFeature && featureFlagger.isFeatureOn(.aiChatSelectionContext)
+    }
+
+    func shouldDisplayAskAboutLinkMenuItem(onSERP: Bool) -> Bool {
+        shouldDisplayAnyAIChatFeature
+            && featureFlagger.isFeatureOn(.aiChatPageContext)
+            && featureFlagger.isFeatureOn(onSERP ? .aiChatAskAboutSerpPage : .aiChatAskAboutLinkedPage)
     }
 
     var shouldDisplayApplicationMenuShortcut: Bool {

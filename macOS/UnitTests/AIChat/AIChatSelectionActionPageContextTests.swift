@@ -175,6 +175,10 @@ private final class PageContextMock: PageContextProtocol {
     func requestPageContextAttachment() {
         requestPageContextAttachmentCallCount += 1
     }
+
+    func attachLinkedPage(_ url: URL) -> Task<LinkedPageContextLoadResult?, Never> {
+        Task { nil }
+    }
 }
 
 private final class SelectionActionAIChatCoordinatorMock: AIChatCoordinating {
