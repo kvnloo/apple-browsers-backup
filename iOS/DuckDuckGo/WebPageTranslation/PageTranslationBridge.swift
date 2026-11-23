@@ -35,7 +35,7 @@ protocol PageTranslationBridging: AnyObject {
 /// The bundle answers each push with a separate notification that carries no request id, so only one
 /// request is in flight, and once a reply may still arrive late (timeout, cancel) the bridge asks
 /// nothing more of that document.
-final class PageTranslationBridge: NSObject, Subfeature, PageTranslationBridging {
+final class PageTranslationBridge: NSObject, Subfeature {
 
     enum Error: DDGError {
         case timeout
@@ -224,3 +224,6 @@ final class PageTranslationBridge: NSObject, Subfeature, PageTranslationBridging
         return decoded
     }
 }
+
+// In an extension, so the protocol's @MainActor isn't inferred for the whole class.
+extension PageTranslationBridge: PageTranslationBridging {}
