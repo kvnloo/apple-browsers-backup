@@ -896,10 +896,7 @@ final class UnifiedToggleInputView: UIView {
         guard usesNewTabPageCardBackground else {
             return UIColor(singleUseColor: .unifiedToggleInputCardBackground)
         }
-        // The dark card tint is tuned for the illustration, so the plain background uses the legacy surface.
-        return newTabPageCustomizationStore.isBackgroundIllustrationVisible
-            ? UIColor(singleUseColor: .newTabPageSearchCardBackground)
-            : UIColor(designSystemColor: .surface)
+        return newTabPageCustomizationStore.theme.cardBackgroundColor
     }
 
     // MARK: - Constraints
@@ -2297,7 +2294,7 @@ private extension UnifiedToggleInputView {
     }
 
     func setupSubscriptions() {
-        newTabPageCustomizationStore.backgroundIllustrationVisibilityPublisher
+        newTabPageCustomizationStore.themePublisher
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
