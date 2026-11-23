@@ -20,6 +20,7 @@
 import Combine
 import XCTest
 import AIChat
+import PrivacyConfig
 @testable import DuckDuckGo
 @testable import Core
 
@@ -203,6 +204,21 @@ final class AIChatHistoryViewModelTests: XCTestCase {
                        "chat-history sheet clears persistent chats when not in fire mode")
         XCTAssertEqual(fireExecutor.scheduleSyncCallCount, 1,
                        "a successful clear must flush sync so the deletion isn't re-pulled")
+    }
+
+    func testDeleteAllChatsGoesThroughTheFireButtonOnlyWhileTheFlagIsOn() {
+        let fireExecutor = MockChatHistoryFireExecutor()
+        let flagger = MockFeatureFlagger()
+        let sut = makeSUT(chats: [chat(id: "p1", pinned: true)], fireExecutor: fireExecutor, isFireMode: true, featureFlagger: flagger)
+        var deletedModes: [Bool] = []
+        sut.onDeleteAllChats = { deletedModes.append($0) }
+
+        XCTAssertFalse(sut.deleteAllChatsThroughFireButton())
+        flagger.enabledFeatureFlags = [.fireButtonDeleteAllChats]
+        XCTAssertTrue(sut.deleteAllChatsThroughFireButton())
+
+        XCTAssertEqual(deletedModes, [true])
+        XCTAssertTrue(fireExecutor.burnedAllChatsIsFireMode.isEmpty, "The Fire button deletes the chats, not the sheet")
     }
 
     func testBurnAllChats_noFireExecutor_isNoOp() {
@@ -733,10 +749,12 @@ final class AIChatHistoryViewModelTests: XCTestCase {
         source: AIChatHistorySource = .browserMenu,
         isFireMode: Bool = false,
         mutationQueue: DispatchQueue = .main,
-        instrumentation: AIChatHistoryInstrumentation = MockAIChatHistoryInstrumentation()
+        instrumentation: AIChatHistoryInstrumentation = MockAIChatHistoryInstrumentation(),
+        featureFlagger: FeatureFlagger = MockFeatureFlagger()
     ) -> AIChatHistoryViewModel {
         let sut = AIChatHistoryViewModel(
             reader: MockChatHistoryReader(chats: chats),
+            featureFlagger: featureFlagger,
             fireExecutor: fireExecutor,
             downloader: downloader,
             modelDisplays: modelDisplays,
