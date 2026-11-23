@@ -300,10 +300,11 @@ extension ContextMenuManager {
         }
     }
 
-    /// The link to offer "Ask About Page" for: a plain web link on a web page, outside the sidebar.
+    /// The link to offer "Ask About Page" for: a plain web link on a plain web page, outside the sidebar.
     private var askAboutLinkURL: URL? {
         guard !isLoadedInSidebar,
               case .url(let tabURL, _, _) = tabContent,
+              LinkedPageContextLoader.isSupported(tabURL),
               let url = linkURL.flatMap(URL.init(string:)),
               LinkedPageContextLoader.isSupported(url),
               aiChatMenuConfiguration.shouldDisplayAskAboutLinkMenuItem(onSERP: tabURL.isDuckDuckGoSearch) else {

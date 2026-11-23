@@ -130,6 +130,15 @@ struct AskAboutLinkMenuTests {
     }
 
     @available(iOS 16, macOS 13, *)
+    @Test("Pages that aren't plain web pages get no item", .timeLimit(.minutes(1)),
+          arguments: ["file:///Users/someone/page.html", "https://user:secret@example.com/"])
+    func unsupportedPagesGetNoItem(page: String) throws {
+        setFlags(serp: true, other: true)
+        let menu = openMenu(makeManager(tabContent: .url(try #require(URL(string: page)), source: .link)), link: "https://example.com/a")
+        #expect(askAboutPageItem(in: menu) == nil)
+    }
+
+    @available(iOS 16, macOS 13, *)
     @Test("No item in the sidebar's own web view or on a Duck.ai tab", .timeLimit(.minutes(1)))
     func noItemInSidebarOrDuckAITab() {
         setFlags(serp: true, other: true)
