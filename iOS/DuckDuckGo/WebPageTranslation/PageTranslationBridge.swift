@@ -24,11 +24,18 @@ import UserScript
 import WebKit
 import WebPageTranslation
 
+/// The page side of a translation: its text out, the translations back in.
+@MainActor
+protocol PageTranslationBridging: AnyObject {
+    func extract() async throws -> (units: [PageTranslationUnit], documentID: UUID)
+    func apply(_ updates: [PageTranslationUpdate], from source: String, to target: String, in documentID: UUID) async throws -> Int
+}
+
 /// Talks to C-S-S's `pageTranslation` bundle in the isolated world, injecting it once per document.
 /// The bundle answers each push with a separate notification that carries no request id, so only one
 /// request is in flight, and once a reply may still arrive late (timeout, cancel) the bridge asks
 /// nothing more of that document.
-final class PageTranslationBridge: NSObject, Subfeature {
+final class PageTranslationBridge: NSObject, Subfeature, PageTranslationBridging {
 
     enum Error: DDGError {
         case timeout
@@ -93,8 +100,8 @@ final class PageTranslationBridge: NSObject, Subfeature {
     @MainActor private var timeoutTask: Task<Void, Never>?
     @MainActor private var isEnded = false
     @MainActor private var isInjected = false
-    /// Changes with every document, so a request can tell the page changed while it was injecting.
-    @MainActor private var document = 0
+    /// New for every document, so a request can tell the page changed while it was injecting.
+    @MainActor private var documentID = UUID()
 
     /// - Parameters:
     ///   - inject: puts the bundle into the current document.
@@ -120,24 +127,29 @@ final class PageTranslationBridge: NSObject, Subfeature {
         }
     }
 
+    /// - Returns: the units, and the document they belong to, for `apply`.
     @MainActor
-    func extract() async throws -> [PageTranslationUnit] {
+    func extract() async throws -> (units: [PageTranslationUnit], documentID: UUID) {
+        // Read before the request: the document can change after the reply, before this resumes.
+        let documentID = documentID
         let params = try await request("extract", params: [String: String](), reply: .extractResult)
-        return try Self.decode(ExtractResult.self, from: params).units
+        return (try Self.decode(ExtractResult.self, from: params).units, documentID)
     }
 
+    /// - Parameter documentID: from the `extract` the updates' units came from.
     @MainActor
-    func apply(_ updates: [PageTranslationUpdate], from source: String, to target: String) async throws -> Int {
+    func apply(_ updates: [PageTranslationUpdate], from source: String, to target: String, in documentID: UUID) async throws -> Int {
+        // Each document numbers its units from 0, so another document's updates would hit the wrong ones.
+        guard documentID == self.documentID else { throw CancellationError() }
         let params = try await request("apply",
                                        params: ApplyParams(sourceLanguage: source, targetLanguage: target, updates: updates),
                                        reply: .applyResult)
         return try Self.decode(ApplyResult.self, from: params).count
     }
 
-    /// Fails the request in progress with `CancellationError`. A reply may still come, so the bridge ends.
+    /// Sends nothing more until the next document, and fails the request in progress with `CancellationError`.
     @MainActor
-    func cancelPending() {
-        guard isRequesting else { return }
+    func end() {
         finish(.failure(CancellationError()), ending: true)
     }
 
@@ -147,7 +159,7 @@ final class PageTranslationBridge: NSObject, Subfeature {
         finish(.failure(CancellationError()), ending: false)
         isEnded = false
         isInjected = false
-        document += 1
+        documentID = UUID()
     }
 
     @MainActor
@@ -158,10 +170,10 @@ final class PageTranslationBridge: NSObject, Subfeature {
         defer { isRequesting = false }
 
         if !isInjected {
-            let document = document
+            let documentID = documentID
             try await inject()
             // The bundle went into a page that's gone, or the request was cancelled meanwhile.
-            guard document == self.document, !isEnded else { throw CancellationError() }
+            guard documentID == self.documentID, !isEnded else { throw CancellationError() }
             isInjected = true
         }
 
