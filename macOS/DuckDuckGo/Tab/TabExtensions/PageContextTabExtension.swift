@@ -252,7 +252,9 @@ final class PageContextTabExtension {
         pageContextUserScript.collectionResultPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] result in
-                guard let self else {
+                // While a linked page holds the slot, this tab's own page can't take it back: the script
+                // also reports on its own as the page changes.
+                guard let self, !self.isLinkedPageInSlot else {
                     return
                 }
                 let pageContext = result.pageContext
