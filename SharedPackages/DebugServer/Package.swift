@@ -29,6 +29,9 @@ let package = Package(
         .library(name: "DebugServer", targets: ["DebugServer"]),
         .library(name: "LaunchProfile", targets: ["LaunchProfile"]),
     ],
+    dependencies: [
+        .package(path: "../DDGError"),
+    ],
     targets: [
         .target(
             name: "DebugServer",
@@ -40,7 +43,12 @@ let package = Package(
             name: "DebugServerTests",
             dependencies: ["DebugServer"]
         ),
-        .target(name: "LaunchProfile"),
+        .target(
+            name: "LaunchProfile",
+            dependencies: [
+                .product(name: "DDGError", package: "DDGError"),
+            ]
+        ),
         .testTarget(
             name: "LaunchProfileTests",
             dependencies: ["LaunchProfile"]
