@@ -5878,6 +5878,12 @@ extension MainViewController: BrowserChromeDelegate {
         viewCoordinator.omniBar
     }
 
+    var addressBarChromeView: UIView {
+        let barView = omniBar.barView
+        guard let toolbar = viewCoordinator.toolbar, barView.isDescendant(of: toolbar) else { return barView }
+        return toolbar.capsuleView
+    }
+
     func setUnifiedInputContentOverlaySuppressed(_ suppressed: Bool) {
         guard let coordinator = unifiedToggleInputCoordinator else { return }
         coordinator.setContentOverlaySuppressed(suppressed)
