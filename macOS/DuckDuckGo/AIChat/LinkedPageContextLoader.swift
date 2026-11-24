@@ -24,6 +24,7 @@ import FeatureFlags_macOS
 import Foundation
 import MaliciousSiteProtection
 import os.log
+import PixelKit
 import PrivacyConfig
 import UserScript
 import WebKit
@@ -56,6 +57,7 @@ final class LinkedPageContextLoader: LinkedPageContextLoading {
     private let maliciousSiteDetector: MaliciousSiteDetecting
     private let isGPCEnabled: () -> Bool
     private let featureFlagger: FeatureFlagger
+    private let onRetryWithoutSession: () -> Void
 
     private lazy var linkProtection = LinkProtection(privacyManager: contentBlocking.privacyConfigurationManager,
                                                      contentBlockingManager: contentBlocking.contentBlockingManager,
@@ -67,13 +69,17 @@ final class LinkedPageContextLoader: LinkedPageContextLoading {
          httpsUpgrade: HTTPSUpgrade,
          maliciousSiteDetector: MaliciousSiteDetecting,
          isGPCEnabled: @escaping () -> Bool,
-         featureFlagger: FeatureFlagger) {
+         featureFlagger: FeatureFlagger,
+         onRetryWithoutSession: @escaping () -> Void = {
+             PixelKit.fire(AIChatPixel.aiChatLinkAskAboutPageRetryWithoutSession, frequency: .dailyAndCount)
+         }) {
         self.burnerMode = burnerMode
         self.contentBlocking = contentBlocking
         self.httpsUpgrade = httpsUpgrade
         self.maliciousSiteDetector = maliciousSiteDetector
         self.isGPCEnabled = isGPCEnabled
         self.featureFlagger = featureFlagger
+        self.onRetryWithoutSession = onRetryWithoutSession
     }
 
     /// Only plain web links: no other schemes, and no credentials in the URL.
@@ -111,8 +117,27 @@ final class LinkedPageContextLoader: LinkedPageContextLoading {
         }
         guard !Task.isCancelled else { return .failed(.timeout) }
 
+        return await Self.read(with: { withSession in await self.read(request, withSession: withSession) },
+                               onRetryWithoutSession: onRetryWithoutSession)
+    }
+
+    /// Reads with the user's session first. That read never follows a redirect to another origin, so the
+    /// session can't cause side effects there; on such a redirect the whole read starts again without it.
+    static func read(with attempt: (_ withSession: Bool) async -> LinkedPageContextLoadResult,
+                     onRetryWithoutSession: () -> Void) async -> LinkedPageContextLoadResult {
+        let result = await attempt(true)
+        guard result == .failed(.redirectBlocked), !Task.isCancelled else { return result }
+        onRetryWithoutSession()
+        return await attempt(false)
+    }
+
+    private func read(_ request: URLRequest, withSession: Bool) async -> LinkedPageContextLoadResult {
         let configuration = WKWebViewConfiguration()
         configuration.applyStandardConfiguration(featureFlagger: featureFlagger, contentBlocking: contentBlocking, burnerMode: burnerMode)
+        if !withSession {
+            // No cookies, storage or logins: nothing the redirect targets can act on as the user.
+            configuration.websiteDataStore = .nonPersistent()
+        }
         if #available(macOS 15.4, *) {
             // The user didn't open this page, so their browser extensions don't get to see it.
             configuration.webExtensionController = nil
@@ -131,7 +156,11 @@ final class LinkedPageContextLoader: LinkedPageContextLoading {
             return .failed(.scriptError)
         }
 
-        return await LinkedPageLoad(configuration: configuration) { webView in
+        let redirects: LinkedPageLoad.Redirects = withSession ? .sameOriginOnly : .anyOrigin(isAllowed: { [maliciousSiteDetector] url in
+            guard Self.isSupported(url) else { return false }
+            return await maliciousSiteDetector.evaluate(url) == nil
+        })
+        return await LinkedPageLoad(configuration: configuration, redirects: redirects) { webView in
             pageContextUserScript.webView = webView
             return await pageContextUserScript.collectAndWait(timeout: 10)
         }.run(request)
@@ -146,20 +175,31 @@ private final class IgnoringUserContentControllerDelegate: UserContentController
                                updateEvent: ContentBlockerRulesManager.UpdateEvent) {}
 }
 
-/// One load of one linked page in a windowless web view. It only lets the main frame stay on the
-/// origin it started on, never opens windows or downloads and denies every permission prompt.
+/// One load of one linked page in a windowless web view. Its `Redirects` decide where the main frame may
+/// go; it never opens windows or downloads and denies every permission prompt.
 @MainActor
 final class LinkedPageLoad: NSObject {
 
+    enum Redirects {
+        /// The main frame may not leave the origin it started on: the read that carries the user's session.
+        case sameOriginOnly
+        /// The main frame may go to any origin `isAllowed` accepts: the read without a session.
+        case anyOrigin(isAllowed: @MainActor (URL) async -> Bool)
+    }
+
     private let webView: WKWebView
+    private let redirects: Redirects
     private let extract: @MainActor (WKWebView) async -> AIChatPageContextData?
     private var initialURL: URL?
     private var mimeType: String?
     private var isExtracting = false
     private var continuation: CheckedContinuation<LinkedPageContextLoadResult, Never>?
 
-    init(configuration: WKWebViewConfiguration, extract: @escaping @MainActor (WKWebView) async -> AIChatPageContextData?) {
+    init(configuration: WKWebViewConfiguration,
+         redirects: Redirects = .sameOriginOnly,
+         extract: @escaping @MainActor (WKWebView) async -> AIChatPageContextData?) {
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: configuration)
+        self.redirects = redirects
         self.extract = extract
         super.init()
         webView.navigationDelegate = self
@@ -255,13 +295,31 @@ extension LinkedPageLoad: WKNavigationDelegate {
             finish(.failed(.navigationFailed))
             return
         }
-        // Covers server redirects as well as script and meta-refresh navigations.
-        guard let url = navigationAction.request.url, let initialURL, Self.isSameOrigin(url, as: initialURL) else {
+        // Covers server redirects as well as script and meta-refresh navigations. WebKit asks before it sends
+        // the redirected request, so a cancelled one never reaches the other origin.
+        guard let url = navigationAction.request.url, let initialURL else {
             decisionHandler(.cancel)
             finish(.failed(.redirectBlocked))
             return
         }
-        decisionHandler(.allow)
+        if Self.isSameOrigin(url, as: initialURL) {
+            decisionHandler(.allow)
+            return
+        }
+        switch redirects {
+        case .sameOriginOnly:
+            decisionHandler(.cancel)
+            finish(.failed(.redirectBlocked))
+        case .anyOrigin(let isAllowed):
+            Task { @MainActor in
+                if await isAllowed(url) {
+                    decisionHandler(.allow)
+                } else {
+                    decisionHandler(.cancel)
+                    self.finish(.failed(.redirectBlocked))
+                }
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {

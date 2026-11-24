@@ -227,6 +227,45 @@ struct LinkedPageSameOriginTests {
     }
 }
 
+// MARK: - Retrying without the session
+
+@MainActor
+@Suite("Retrying a linked page without the user's session")
+struct LinkedPageRetryTests {
+
+    private static let page = AIChatPageContextData(title: "Page", favicon: [], url: "https://b.test/", content: "Text",
+                                                    truncated: false, fullContentLength: 4)
+
+    @available(iOS 16, macOS 13, *)
+    @Test("A redirect to another origin is read again without the session", .timeLimit(.minutes(1)))
+    func redirectRetriesWithoutSession() async {
+        var attempts: [Bool] = []
+        var retries = 0
+        let result = await LinkedPageContextLoader.read(with: { withSession in
+            attempts.append(withSession)
+            return withSession ? .failed(.redirectBlocked) : .success(Self.page)
+        }, onRetryWithoutSession: { retries += 1 })
+
+        #expect(result == .success(Self.page))
+        #expect(attempts == [true, false])
+        #expect(retries == 1)
+    }
+
+    @available(iOS 16, macOS 13, *)
+    @Test("Any other outcome of the first read is final", .timeLimit(.minutes(1)),
+          arguments: [LinkedPageContextLoadResult.success(page), .failed(.httpError), .failed(.timeout), .prevented("pdf")])
+    func otherOutcomesAreFinal(first: LinkedPageContextLoadResult) async {
+        var attempts: [Bool] = []
+        let result = await LinkedPageContextLoader.read(with: { withSession in
+            attempts.append(withSession)
+            return first
+        }, onRetryWithoutSession: { Issue.record("no retry expected") })
+
+        #expect(result == first)
+        #expect(attempts == [true])
+    }
+}
+
 // MARK: - Hidden web view load
 
 @MainActor
