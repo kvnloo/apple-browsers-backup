@@ -818,6 +818,7 @@ final class AIChatHistoryViewModelTests: XCTestCase {
         func viewModelDidRequestChatProtection() { didRequestChatProtection = true }
         private(set) var didRequestDuckAISettings = false
         func viewModelDidRequestDuckAISettings() { didRequestDuckAISettings = true }
+        func viewModelDidRequestDataClearingSettings() {}
         func viewModelWillClose() {}
     }
 

@@ -308,6 +308,10 @@ extension IPadChatListSidebar: AIChatHistoryViewModelDelegate {
         host?.currentTab?.submitOpenSettingsAction()
     }
 
+    func viewModelDidRequestDataClearingSettings() {
+        host?.segueToSettingsDataClearing()
+    }
+
     func viewModelDidExportChat(filename: String) {
         host?.viewModelDidExportChat(filename: filename)
     }

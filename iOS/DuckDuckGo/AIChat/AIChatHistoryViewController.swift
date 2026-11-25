@@ -593,7 +593,10 @@ final class AIChatHistoryViewController: UIViewController {
             }),
             browsingMode: .normal,
             onConfirm: { _ in },
-            onCancel: {}
+            onCancel: {},
+            onOpenSettings: { [weak self] in
+                self?.viewModel.openDataClearingSettings()
+            }
         )
     }
 

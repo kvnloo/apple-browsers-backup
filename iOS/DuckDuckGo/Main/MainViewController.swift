@@ -8885,6 +8885,10 @@ extension MainViewController: TabDelegate {
         segueToSettingsSync()
     }
 
+    func tabDidRequestSettingsToDataClearing(_ tab: TabViewController) {
+        segueToSettingsDataClearing()
+    }
+
     func tabContentProcessDidTerminate(tab: TabViewController) {
         findInPageView?.done()
 
