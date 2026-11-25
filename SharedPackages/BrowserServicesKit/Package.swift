@@ -266,6 +266,7 @@ let package = Package(
                 .product(name: "DDGSyncCrypto", package: "sync_crypto"),
                 .product(name: "Gzip", package: "GzipSwift"),
                 .product(name: "Networking", package: "Networking"),
+                .product(name: "WideEvent", package: "WideEvent"),
                 "PrivacyConfig",
             ],
             resources: [
@@ -678,6 +679,7 @@ let package = Package(
                 .product(name: "Persistence", package: "Persistence"),
                 "PrivacyConfigTestsUtils",
                 .product(name: "Networking", package: "Networking"),
+                .product(name: "WideEvent", package: "WideEvent"),
             ],
             resources: [
                 .copy("Resources/SyncMetadata_V3.sqlite"),
