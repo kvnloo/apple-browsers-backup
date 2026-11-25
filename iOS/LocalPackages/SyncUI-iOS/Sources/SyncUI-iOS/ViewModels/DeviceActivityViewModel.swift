@@ -76,10 +76,12 @@ public final class DeviceActivityViewModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var error: Error?
     @Published public private(set) var hasLoaded = false
+    @Published public private(set) var isOnlyThisDeviceSynced = false
     @Published public private(set) var reviewState = DeviceActivityReviewState(reviewedThrough: nil, isInitialized: false)
 
     private let accountIdentifier: () -> String?
     private let makePageFetcher: () throws -> PageFetcher
+    private let checkOnlyThisDeviceSynced: () async throws -> Bool
     private var fetchPage: PageFetcher?
     private let loadReviewState: (String) -> DeviceActivityReviewState?
     private let saveReviewState: (String, DeviceActivityReviewState) -> Void
@@ -91,11 +93,13 @@ public final class DeviceActivityViewModel: ObservableObject {
 
     public init(accountIdentifier: @escaping () -> String?,
                 makePageFetcher: @escaping () throws -> PageFetcher,
+                checkOnlyThisDeviceSynced: @escaping () async throws -> Bool = { false },
                 loadReviewState: @escaping (String) -> DeviceActivityReviewState? = { _ in nil },
                 saveReviewState: @escaping (String, DeviceActivityReviewState) -> Void = { _, _ in },
                 sleep: @escaping (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }) {
         self.accountIdentifier = accountIdentifier
         self.makePageFetcher = makePageFetcher
+        self.checkOnlyThisDeviceSynced = checkOnlyThisDeviceSynced
         self.loadReviewState = loadReviewState
         self.saveReviewState = saveReviewState
         self.sleep = sleep
@@ -144,6 +148,7 @@ public final class DeviceActivityViewModel: ObservableObject {
         fetchPage = nil
         hasMore = true
         hasLoaded = false
+        isOnlyThisDeviceSynced = false
         isLoading = false
         error = nil
         accountID = nil
@@ -160,6 +165,7 @@ public final class DeviceActivityViewModel: ObservableObject {
         fetchPage = nil
         hasMore = true
         hasLoaded = false
+        isOnlyThisDeviceSynced = false
         error = nil
         reviewState = currentID.flatMap(loadReviewState) ?? DeviceActivityReviewState(reviewedThrough: nil, isInitialized: false)
     }
@@ -195,6 +201,12 @@ public final class DeviceActivityViewModel: ObservableObject {
                     try await sleep(Self.emptyPageDelayNanoseconds)
                 }
             } while receivedEntries.isEmpty && hasMore
+
+            if entries.isEmpty && receivedEntries.isEmpty {
+                let onlyThisDevice = (try? await checkOnlyThisDeviceSynced()) ?? false
+                try checkRequestIsCurrent(requestGeneration)
+                isOnlyThisDeviceSynced = onlyThisDevice
+            }
 
             seedReviewStateIfNeeded(from: receivedEntries)
             entries = (entries + receivedEntries).sorted { $0.date > $1.date }
