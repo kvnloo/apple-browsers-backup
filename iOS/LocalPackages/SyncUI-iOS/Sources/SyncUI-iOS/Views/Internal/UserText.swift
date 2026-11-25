@@ -80,6 +80,7 @@ public struct UserText {
     // Device Activity
     static let deviceActivityTitle = NotLocalizedString("sync.device.activity.title", bundle: Bundle.module, value: "Device Activity", comment: "Sync device activity screen and settings row title")
     static let deviceActivityIntro = NotLocalizedString("sync.device.activity.intro", bundle: Bundle.module, value: "Recently synced or removed devices:", comment: "Description shown above device activity history")
+    static let deviceActivityOnlyThisDevice = NotLocalizedString("sync.device.activity.only.this.device", bundle: Bundle.module, value: "Only this device is synced", comment: "Empty activity state when only the current device is synced")
     static let deviceActivityEmpty = NotLocalizedString("sync.device.activity.empty", bundle: Bundle.module, value: "You have no recent activity", comment: "Empty state shown when there is no device activity")
     static let deviceActivityJustNow = NotLocalizedString("sync.device.activity.just.now", bundle: Bundle.module, value: "Just now", comment: "Activity timestamp for events less than a minute old")
     static let deviceActivitySynced = NotLocalizedString("sync.device.activity.synced", bundle: Bundle.module, value: "Synced", comment: "Activity label for a device that synced")
