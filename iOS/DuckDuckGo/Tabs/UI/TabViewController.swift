@@ -880,6 +880,7 @@ class TabViewController: UIViewController {
     private var pageTranslationSession: PageTranslationSession?
     /// The page the running translation is for, so a URL change can tell an in-page link from leaving the page.
     private var pageTranslationURL: URL?
+    private(set) var pageTranslationOffer: PageTranslationOffer?
     var browserToolScopeFactory: (@MainActor () -> BrowserToolScope?)?
     var tabAttachmentSource: MultiTabAttachmentSource?
 
@@ -2173,6 +2174,9 @@ class TabViewController: UIViewController {
         if let newURL, let pageTranslationURL, !Self.isSamePage(newURL, as: pageTranslationURL) {
             cancelPageTranslation()
         }
+        if let newURL, pageTranslationOffer != nil, !Self.offer(pageTranslationOffer, stillAppliesTo: newURL) {
+            pageTranslationOffer = nil
+        }
 
         guard let newURL = newURL else { return }
 
@@ -3178,8 +3182,11 @@ extension TabViewController: WKNavigationDelegate {
         }
 
         Task { [weak self, weak webView] in
-            guard let webView, let offer = await provider.bannerOffer(in: webView) else { return }
-            self?.showTranslationBanner(offer)
+            guard let webView, let pageOffer = await provider.offer(in: webView) else { return }
+            self?.pageTranslationOffer = pageOffer
+            if pageOffer.showsBanner {
+                self?.showTranslationBanner(pageOffer.offer)
+            }
         }
     }
 
@@ -3239,6 +3246,12 @@ extension TabViewController: WKNavigationDelegate {
         pageTranslationSession = session
         pageTranslationURL = webView.url
         session.start(offer)
+    }
+
+    /// Whether an offer detected on one page still holds at `url`: an in-page link keeps it, any other change drops it.
+    static func offer(_ pageOffer: PageTranslationOffer?, stillAppliesTo url: URL) -> Bool {
+        guard let pageOffer else { return false }
+        return isSamePage(url, as: pageOffer.url)
     }
 
     /// The same URL apart from its fragment.
@@ -3374,6 +3387,7 @@ extension TabViewController: WKNavigationDelegate {
             firstPaintCover.didStartNavigation(navigation)
             translationBannerPresenter.dismiss(animated: false)
             cancelPageTranslation()
+            pageTranslationOffer = nil
         }
         if webView === self.webView, case .available = aiChatContextualAttachMoreTabsFeature.state {
             if initialAIChatPromptSession.didStartNavigation(navigation) {

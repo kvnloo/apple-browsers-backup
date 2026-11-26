@@ -67,19 +67,39 @@ final class PageTranslationOfferProviderTests: XCTestCase {
         XCTAssertEqual(decision, .banner(TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1)))
     }
 
-    func testBannerOfferForAnUnchangedPage() async throws {
+    func testOfferForAnUnchangedPageShowsTheBanner() async throws {
         let webView = try await loadedFrenchPage(urlsReported: [URL(string: "https://example.fr/")!])
         let provider = try makeProvider(deviceLanguages: ["en-US"])
-        let offer = await provider.bannerOffer(in: webView)
-        XCTAssertEqual(offer, TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1))
+        let pageOffer = await provider.offer(in: webView)
+        XCTAssertEqual(pageOffer, PageTranslationOffer(offer: TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1),
+                                                       showsBanner: true,
+                                                       url: URL(string: "https://example.fr/")!))
     }
 
-    func testNoBannerOfferWhenThePageChangedDuringDetection() async throws {
+    func testMenuOnlyOfferDoesNotShowTheBanner() async throws {
+        let webView = try await loadedFrenchPage(urlsReported: [URL(string: "https://example.fr/")!])
+        let provider = try makeProvider(deviceLanguages: ["en-US", "fr-FR"])
+        let pageOffer = await provider.offer(in: webView)
+        XCTAssertEqual(pageOffer, PageTranslationOffer(offer: TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1),
+                                                       showsBanner: false,
+                                                       url: URL(string: "https://example.fr/")!))
+    }
+
+    func testNoOfferWhenThePageChangedDuringDetection() async throws {
         let webView = try await loadedFrenchPage(urlsReported: [URL(string: "https://example.fr/")!,
                                                                 URL(string: "https://example.fr/other")!])
         let provider = try makeProvider(deviceLanguages: ["en-US"])
-        let offer = await provider.bannerOffer(in: webView)
-        XCTAssertNil(offer)
+        let pageOffer = await provider.offer(in: webView)
+        XCTAssertNil(pageOffer)
+    }
+
+    func testAnOfferStillAppliesOnlyToItsOwnPage() {
+        let pageOffer = PageTranslationOffer(offer: TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1),
+                                             showsBanner: true,
+                                             url: URL(string: "https://a.fr/p")!)
+        XCTAssertTrue(TabViewController.offer(pageOffer, stillAppliesTo: URL(string: "https://a.fr/p#x")!))
+        XCTAssertFalse(TabViewController.offer(pageOffer, stillAppliesTo: URL(string: "https://a.fr/q")!))
+        XCTAssertFalse(TabViewController.offer(nil, stillAppliesTo: URL(string: "https://a.fr/p")!))
     }
 
     func testNoOfferOnASiteInTheFeatureExceptions() async throws {
