@@ -93,15 +93,6 @@ final class PageTranslationOfferProviderTests: XCTestCase {
         XCTAssertNil(pageOffer)
     }
 
-    func testAnOfferStillAppliesOnlyToItsOwnPage() {
-        let pageOffer = PageTranslationOffer(offer: TranslationOffer(source: "fr", target: "en", pairID: "fr-en", downloadBytes: 1),
-                                             showsBanner: true,
-                                             url: URL(string: "https://a.fr/p")!)
-        XCTAssertTrue(TabViewController.offer(pageOffer, stillAppliesTo: URL(string: "https://a.fr/p#x")!))
-        XCTAssertFalse(TabViewController.offer(pageOffer, stillAppliesTo: URL(string: "https://a.fr/q")!))
-        XCTAssertFalse(TabViewController.offer(nil, stillAppliesTo: URL(string: "https://a.fr/p")!))
-    }
-
     func testNoOfferOnASiteInTheFeatureExceptions() async throws {
         let manager = MockPrivacyConfigurationManager()
         manager.privacyConfig = try WebPageTranslationSettingsTests.config(settings: "{}", exceptions: ["example.fr"])

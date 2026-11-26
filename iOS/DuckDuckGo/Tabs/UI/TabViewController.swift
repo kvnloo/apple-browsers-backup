@@ -2174,8 +2174,8 @@ class TabViewController: UIViewController {
         if let newURL, let pageTranslationURL, !Self.isSamePage(newURL, as: pageTranslationURL) {
             cancelPageTranslation()
         }
-        if let newURL, pageTranslationOffer != nil, !Self.offer(pageTranslationOffer, stillAppliesTo: newURL) {
-            pageTranslationOffer = nil
+        if let newURL, let pageTranslationOffer, !Self.isSamePage(newURL, as: pageTranslationOffer.url) {
+            self.pageTranslationOffer = nil
         }
 
         guard let newURL = newURL else { return }
@@ -3261,12 +3261,6 @@ extension TabViewController: WKNavigationDelegate {
         pageTranslationSession = session
         pageTranslationURL = webView.url
         session.start(offer)
-    }
-
-    /// Whether an offer detected on one page still holds at `url`: an in-page link keeps it, any other change drops it.
-    static func offer(_ pageOffer: PageTranslationOffer?, stillAppliesTo url: URL) -> Bool {
-        guard let pageOffer else { return false }
-        return isSamePage(url, as: pageOffer.url)
     }
 
     /// The same URL apart from its fragment.
