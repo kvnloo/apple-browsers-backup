@@ -604,7 +604,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var wideEventService: WideEventService = {
         return WideEventService(
             wideEvent: wideEvent,
-            subscriptionManager: subscriptionManager
+            subscriptionManager: subscriptionManager,
+            isSyncSetupWideEventEnabled: { [featureFlagger] in featureFlagger.isFeatureOn(.sendSyncSetupWideEvent) }
         )
     }()
 
